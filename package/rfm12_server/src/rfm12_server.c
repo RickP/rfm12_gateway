@@ -107,7 +107,7 @@ void serve(int *socket) {
 		  has_message = 0;
 		}
 		// If we received a message put it on the socket
-		else if (rf12_recvDone() && rf12_crc == 0) {
+		else if (rf12_recvDone() && rf12_crc == 0 && rf12_len > 0) {
 
 			// Fill sendbuffer with the header and the payload
 			// memcpy(sendBuf,(void *) &rf12_hdr, 1);
@@ -148,6 +148,8 @@ int main(int argc, char *argv[])
 
 			// create threads and pass the socket
 			pthread_create(&servethread, NULL, (void *) serve, &s);
+
+			pthread_join(&servethread, 0);
 	}
 
 	return ret;
