@@ -10,17 +10,17 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <string.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 
-#define SOCKETFILE	"/tmp/rfm12socket"
-#define MAXMSG	512
-
-
-volatile int hasdata = 0;
-volatile int nodeid;
 volatile int8_t payload[RF12_MAXDATA];
+
+lua_State *L;
 
 /*
  * This is the thread for fetching/pushing data to the rf module
@@ -40,100 +40,72 @@ void pollRFM() {
 	}
 }
 
-int make_named_socket (const char *filename)
-{
-  struct sockaddr_un name;
-  int sock;
-  size_t size;
-
-  /* Create the socket.   */
-
-  sock = socket (PF_UNIX, SOCK_STREAM, 0);
-  if (sock < 0)
-    {
-      perror ("socket");
-      exit (EXIT_FAILURE);
-    }
-
-  /* Bind a name to the socket.   */
-
-  name.sun_family = AF_FILE;
-  strcpy (name.sun_path, filename);
-
-  /* The size of the address is
-     the offset of the start of the filename,
-     plus its length,
-     plus one for the terminating null byte.  */
-  size = (offsetof (struct sockaddr_un, sun_path)
-	  + strlen (name.sun_path) + 1);
-
-  unlink(filename);
-
-  if (bind (sock, (struct sockaddr *) &name, size) < 0)
-    {
-      perror ("bind");
-      exit (EXIT_FAILURE);
-    }
-
-
-  // fcntl(sock,F_SETFL,x | O_NONBLOCK);
-
-  return sock;
-}
-
 // Server thread
-void serve(int *socket) {
+void serve() {
 
-    size_t size, payload_size;
-    int8_t payload[RF12_MAXDATA];
-    // int8_t sendBuf[RF12_MAXDATA + 2];
-    int has_message = 0;
-
+	char data_parts[2][RF12_MAXDATA+1];
+	char filePath[RF12_MAXDATA];
+	int partNum, charNum, i, luastatus;
 
 	while (1) {
 
-		// receive input - nonblocking
-		size = recv(*socket, (void *) payload, RF12_MAXDATA, MSG_NOSIGNAL | MSG_DONTWAIT);
+		 if (rf12_recvDone() && rf12_crc == 0 && rf12_len > 0) {
 
-		if (size == 0) break;
-		if (size != -1) {
-			payload_size = size;
-			has_message = 1;
-		}
+			// ACK the message
+			rf12_sendStart_simple(RF12_ACK_REPLY);
 
-		// Send message - sends it with an ack header
-		if (has_message && rf12_canSend()) {
-		  rf12_sendStart(RF12_ACK_REPLY, payload, payload_size);
-		  has_message = 0;
-		}
-		// If we received a message put it on the socket
-		else if (rf12_recvDone() && rf12_crc == 0 && rf12_len > 0) {
+			partNum = 0;
+			charNum = 0;
 
-			// Fill sendbuffer with the header and the payload
-			// memcpy(sendBuf,(void *) &rf12_hdr, 1);
-			// memcpy((void *) &sendBuf[1], (void *) rf12_data, rf12_len);
-			// if(send(*socket, (void *) sendBuf, rf12_len + 1, MSG_NOSIGNAL) == -1) break;
+			for (i=0; i<2; i++) {
+				data_parts[i][0] = '\0';
+			}
 
-			// Send it to the socket
-			if(send(*socket, (void *) rf12_data, rf12_len, MSG_NOSIGNAL) == -1) break;
+			for (i=0; i<rf12_len-1; i++) {
+			    if( (char) rf12_data[i] == '|' && (char) rf12_data[i+1] == '|')
+			    {
+			    	data_parts[partNum++][charNum] = '\0';
+			    	charNum = 0;
+			    	i++;
+			    } else {
+			    	data_parts[partNum][charNum++] = rf12_data[i];
+			    }
+			}
+			data_parts[partNum][charNum] = '\0';
+
+			memset(&filePath[0], 0, sizeof(filePath));
+			strcat(filePath, "/etc/rfm12.d/");
+			strcat(filePath, data_parts[0]);
+			strcat(filePath, ".lua");
+
+			luastatus = luaL_loadfile(L, filePath) || lua_pcall(L, 0, 0, 0);
+
+			if (luastatus) {
+			  printf("File %s not found!", filePath);
+			  puts("");
+			} else {
+				lua_getglobal(L, "process");  /* function to be called */
+				lua_pushstring(L, data_parts[1]);
+				lua_pcall(L, 1, 1, 0);
+				rf12_sendStart(RF12_ACK_REPLY, lua_tostring(L,-1), lua_strlen(L,-1));
+				lua_pop(L, -1);
+			}
 		}
 
 		// Wait 1/10th of a second to allow receiving/sending
 		usleep(100000);
-
 	}
 }
+
 
 int main(int argc, char *argv[])
 {
 	int ret = 0;
-	int sock;
-	int s = 0;
 	pthread_t pollthread, servethread;
 
-	// Create the socket
-	sock = make_named_socket(SOCKETFILE);
-	listen(sock, 5);
+	// Init lua
+	L = luaL_newstate();
+	luaL_openlibs(L);
 
 	// Init rf12 module
 	rf12_initialize(1, RF12_868MHZ, 1);
@@ -141,16 +113,13 @@ int main(int argc, char *argv[])
 	// create pollthread
 	pthread_create(&pollthread, NULL, (void *) pollRFM, NULL);
 
-	// The main loop
-	while (1) {
-			// wait for socket connection
-			s = accept(sock, NULL, NULL);
+	// create threads and pass the socket
+	pthread_create(&servethread, NULL, (void *) serve, NULL);
 
-			// create threads and pass the socket
-			pthread_create(&servethread, NULL, (void *) serve, &s);
+	pthread_join(servethread, 0);
+	pthread_join(pollthread, 0);
 
-			pthread_join(&servethread, 0);
-	}
+	lua_close(L);
 
 	return ret;
 }

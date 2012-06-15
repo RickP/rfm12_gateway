@@ -9,12 +9,11 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=rfm12_server
-PKG_RELEASE:=1
 PKG_RELEASE:=1.0
 
 PKG_BUILD_DIR := $(BUILD_DIR)/$(PKG_NAME)
 
-DEPENDS:=@GPIO_SUPPORT +kmod-spi-gpio
+DEPENDS:=@GPIO_SUPPORT +kmod-gpio-dev +kmod-spi-gpio +lua 
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -28,14 +27,15 @@ endef
 define Package/rfm12_server/description
 endef
 
-
 TARGET_CFLAGS += $(TLS_CFLAGS)
 TARGET_CFLAGS += -I$(LINUX_DIR)/include
+TARGET_CFLAGS += -I$(STAGING_DIR)/usr/include
 TARGET_LDFLAGS += -Wl,-rpath-link=$(STAGING_DIR)/usr/lib
-MAKE_VARS += \
-	FPIC="$(FPIC)" \
-	TLS_CFLAGS="$(TLS_CFLAGS)" \
-	TLS_LDFLAGS="$(TLS_LDFLAGS)" 
+
+define Build/Compile
+        $(MAKE) -C $(PKG_BUILD_DIR) \
+        $(TARGET_CONFIGURE_OPTS) LDFLAGS="$(TARGET_LDFLAGS)" CFLAGS="$(TARGET_CFLAGS)"
+endef
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
@@ -45,8 +45,8 @@ endef
 define Package/rfm12_server/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/rfm12.init $(1)/etc/init.d/rfm12
-	$(INSTALL_DIR) $(1)/sbin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/rfm12_server $(1)/sbin/rfm12_server
+	$(INSTALL_DIR) $(1)/usr/sbin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/rfm12_server $(1)/usr/sbin/rfm12_server
 endef
 
 
