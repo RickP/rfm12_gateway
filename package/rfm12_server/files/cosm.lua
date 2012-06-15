@@ -5,9 +5,9 @@ function process (input)
   parts = split(input, ',')
 
   c = curl.new()
-  c:setopt(curl.OPT_URL, "http://www.pachube.com/api/feeds/63435/datastreams/" .. parts[1] .. ".csv")
+  c:setopt(curl.OPT_URL, "http://www.pachube.com/api/feeds/<FEED_ID>/datastreams/" .. parts[1] .. ".csv")
   c:setopt(curl.OPT_CUSTOMREQUEST, "PUT")
-  c:setopt(curl.OPT_HTTPHEADER, "X-PachubeApiKey: R0wnmPECxJZzuqfuAIzxBBtZpfCSAKw2THB6TFg2R3Z6QT0g")
+  c:setopt(curl.OPT_HTTPHEADER, "X-PachubeApiKey: <PACHUBE_KEY>")
   c:setopt(curl.OPT_POSTFIELDS, parts[2])
   c:perform()
 
