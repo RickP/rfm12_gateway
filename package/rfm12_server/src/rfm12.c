@@ -44,7 +44,6 @@ static volatile int8_t rxstate;     // current transceiver state
 volatile uint16_t rf12_crc;         // running crc value
 volatile uint8_t rf12_buf[RF_MAX];  // recv/xmit buf, including hdr & crc bytes
 
-long rf12_seq;                      // seq number of encrypted packet (or -1)
 pthread_mutex_t mutex;
 
 static uint16_t _crc16_update(uint16_t crc, uint8_t a)
@@ -112,10 +111,9 @@ uint8_t rf12_initialize (uint8_t id, uint8_t band, uint8_t g) {
 void rf12_recvStart () {
 	pthread_mutex_lock (&mutex);
     rxfill = rf12_len = 0;
+    rf12_crc = ~0;
     if (group != 0)
         rf12_crc = _crc16_update(~0, group);
-    else
-    	rf12_crc = ~0;
     rxstate = TXRECV;
     spitransfer(RF_RECEIVER_ON);
     pthread_mutex_unlock (&mutex);
@@ -176,8 +174,7 @@ void rf12_communicate() {
 
 void rf12_sendStart_simple (uint8_t hdr) {
 	pthread_mutex_lock (&mutex);
-	rf12_hdr = hdr & RF12_HDR_DST ? hdr :
-	                (hdr & ~RF12_HDR_MASK) + (nodeid & NODE_ID);
+	rf12_hdr = hdr & RF12_HDR_DST ? hdr : (hdr & ~RF12_HDR_MASK) + (nodeid & NODE_ID);
 
 	rf12_crc = ~0;
 	rf12_crc = _crc16_update(rf12_crc, group);
@@ -211,7 +208,7 @@ uint8_t rf12_recvDone () {
             rf12_crc = 1; // force bad crc if packet length is invalid
         if (!(rf12_hdr & RF12_HDR_DST) || (nodeid & NODE_ID) == 31 ||
                 (rf12_hdr & RF12_HDR_MASK) == (nodeid & NODE_ID)) {
-            rf12_seq = -1;
+
             pthread_mutex_unlock (&mutex);
             return 1; // it's a broadcast packet or it's addressed to this node
         }
@@ -223,7 +220,6 @@ uint8_t rf12_recvDone () {
 
     return 0;
 }
-
 
 
 

@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdint.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -43,13 +44,23 @@ void pollRFM() {
 // Server thread
 void serve() {
 
-	char data_parts[2][RF12_MAXDATA+1];
 	char filePath[RF12_MAXDATA];
-	int partNum, charNum, i, luastatus;
+	int partNum, charNum, luastatus;
+
+	struct {
+	    char command[5];
+	    char parameter[RF12_MAXDATA-5];
+	} payload;
+
+	char command[6];
+	char parameter[RF12_MAXDATA-4];
+
+	command[5] = '\0';
+	parameter[RF12_MAXDATA-5] = '\0';
 
 	while (1) {
 
-		 if (rf12_recvDone() && rf12_crc == 0 && rf12_len > 0) {
+		 if (rf12_recvDone() && rf12_crc == 0) {
 
 			// ACK the message
 			rf12_sendStart_simple(RF12_ACK_REPLY);
@@ -57,35 +68,25 @@ void serve() {
 			partNum = 0;
 			charNum = 0;
 
-			for (i=0; i<2; i++) {
-				data_parts[i][0] = '\0';
-			}
-
-			for (i=0; i<rf12_len-1; i++) {
-			    if( (char) rf12_data[i] == '|' && (char) rf12_data[i+1] == '|')
-			    {
-			    	data_parts[partNum++][charNum] = '\0';
-			    	charNum = 0;
-			    	i++;
-			    } else {
-			    	data_parts[partNum][charNum++] = rf12_data[i];
-			    }
-			}
-			data_parts[partNum][charNum] = '\0';
+			memcpy(&payload, (char *) rf12_data, sizeof payload);
+			memcpy(command, payload.command, sizeof payload.command);
+			memcpy(parameter, payload.parameter, sizeof payload.parameter);
 
 			memset(&filePath[0], 0, sizeof(filePath));
 			strcat(filePath, "/etc/rfm12.d/");
-			strcat(filePath, data_parts[0]);
+			strcat(filePath, command);
 			strcat(filePath, ".lua");
 
-			luastatus = luaL_loadfile(L, filePath) || lua_pcall(L, 0, 0, 0);
+			luastatus = luaL_loadfile(L, filePath);
 
-			if (luastatus) {
-			  printf("File %s not found!", filePath);
-			  puts("");
+			if (luastatus == LUA_ERRFILE) {
+				printf("File %s not found!\n", filePath);
+			} else if (luastatus == LUA_ERRSYNTAX) {
+				printf("Syntax error in file %s!\n", filePath);
 			} else {
+				luastatus = lua_pcall(L, 0, 0, 0);
 				lua_getglobal(L, "process");  /* function to be called */
-				lua_pushstring(L, data_parts[1]);
+				lua_pushstring(L, parameter);
 				lua_pcall(L, 1, 1, 0);
 				rf12_sendStart(RF12_ACK_REPLY, lua_tostring(L,-1), lua_strlen(L,-1));
 				lua_pop(L, -1);

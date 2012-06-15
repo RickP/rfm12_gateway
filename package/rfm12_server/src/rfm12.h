@@ -86,7 +86,7 @@ char rf12_easyPoll(void);
 char rf12_easySend(const void* data, uint8_t size);
 
 // enable encryption (null arg disables it again)
-void rf12_encrypt(const uint8_t*);
+void rf12_encrypt(uint32_t key[4]);
 
 // low-level control of the RFM12B via direct register access
 // http://tools.jeelabs.org/rfm12b is useful for calculating these

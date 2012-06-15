@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+start()
+{
+   /sbin/rfm12_server > /dev/null &
+}
+        
+stop()
+{
+   killall rfm12_server
+}

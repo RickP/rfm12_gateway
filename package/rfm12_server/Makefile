@@ -47,6 +47,8 @@ define Package/rfm12_server/install
 	$(INSTALL_BIN) ./files/rfm12.init $(1)/etc/init.d/rfm12
 	$(INSTALL_DIR) $(1)/usr/sbin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/rfm12_server $(1)/usr/sbin/rfm12_server
+	$(INSTALL_DIR) $(1)/etc/rfm12.d
+	$(INSTALL_BIN) ./files/*.lua $(1)/etc/rfm12.d/
 endef
 
 
