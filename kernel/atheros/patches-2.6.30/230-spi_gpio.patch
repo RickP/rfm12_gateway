@@ -1,0 +1,39 @@
+--- a/arch/mips/ar231x/ar2315.c
++++ b/arch/mips/ar231x/ar2315.c
+31a32,33
+> #include <linux/spi/spi.h>
+> #include <linux/spi/spi_gpio.h>
+38a41,43
+> 
+> #define ARRAY_AND_SIZE(x)   (x), ARRAY_SIZE(x)
+> 
+40a46,70
+> struct spi_gpio_platform_data spigpio_platform_data = {
+> 	.sck = 1,
+> 	.mosi = 3,
+> 	.miso = 4,
+> 	.num_chipselect = 1,
+> };
+> 
+> static struct platform_device spigpio_device = {
+> 	.name = "spi_gpio",
+> 	.id   = 1,
+> 	.dev = {
+> 		.platform_data = &spigpio_platform_data,
+> 	}
+> };
+> 
+> static struct spi_board_info ar2315_spi_board_info[] = {
+> 	{
+> 		.chip_select = 0,
+> 		.bus_num = 1,
+> 		.controller_data = (void *)7,
+> 		.max_speed_hz = 2500 * 1000,
+> 		.modalias = "spidev",
+> 	},
+> };
+> 
+546a577,579
+> 	spi_register_board_info(ARRAY_AND_SIZE(ar2315_spi_board_info));
+> 	platform_device_register(&spigpio_device);	
+> 
