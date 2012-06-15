@@ -20,7 +20,7 @@ define Package/luacurl
   CATEGORY:=Languages
   TITLE:=luacurl library for the LUA programming language
   URL:=http://www.luaforge.net/projects/luacurl
-  DEPENDS:=+lua +libcurl +libz +libssl +libcrypto
+  DEPENDS:=+lua +libcurl 
 endef
 
 define Package/luacurl/description
